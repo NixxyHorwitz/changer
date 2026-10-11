@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const {
   getConfig,
   updateConfig,
@@ -10,12 +11,66 @@ const {
   DEFAULT_SAMPLE_QRIS,
 } = require('./helper/qris');
 
+// Credentials Admin Console
+const ADMIN_USER = process.env.ADMIN_USER || 'admin';
+const ADMIN_PASS = process.env.ADMIN_PASS || 'adminmemek';
+
+function getExpectedToken() {
+  return crypto.createHash('sha256').update(`${ADMIN_USER}:${ADMIN_PASS}:apics_secret_2026`).digest('hex');
+}
+
+function verifyAuth(req) {
+  const authHeader = req.headers['authorization'] || req.headers['x-admin-token'] || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  return Boolean(token && token === getExpectedToken());
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Admin-Token');
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
+  }
+
+  // Parse Body
+  let body = req.body;
+  if (typeof body === 'string') {
+    try {
+      body = JSON.parse(body);
+    } catch (e) {
+      body = {};
+    }
+  }
+  body = body || {};
+
+  const action = String(body.action || '').toLowerCase();
+
+  // 1. ENDPOINT LOGIN (Tidak perlu auth)
+  if (req.method === 'POST' && action === 'login') {
+    const user = String(body.username || '').trim();
+    const pass = String(body.password || '').trim();
+
+    if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      return res.status(200).json({
+        status: true,
+        message: 'Login berhasil',
+        token: getExpectedToken(),
+      });
+    }
+
+    return res.status(401).json({
+      status: false,
+      message: 'Username atau password console salah!',
+    });
+  }
+
+  // 2. CHECK SECURITY AUTH UNTUK SEMUA OPERASI ADMIN
+  if (!verifyAuth(req)) {
+    return res.status(401).json({
+      status: false,
+      message: 'Akses ditolak: Silakan login terlebih dahulu melalui /consoleaccessor',
+    });
   }
 
   const currentCfg = getConfig();
@@ -35,18 +90,6 @@ module.exports = async (req, res) => {
 
   // POST: Aksi update config atau update transaksi
   if (req.method === 'POST') {
-    let body = req.body;
-    if (typeof body === 'string') {
-      try {
-        body = JSON.parse(body);
-      } catch (e) {
-        body = {};
-      }
-    }
-    body = body || {};
-
-    const action = String(body.action || '').toLowerCase();
-
     // 1. Simpan Pengaturan
     if (action === 'save_config') {
       const updated = updateConfig({

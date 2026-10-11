@@ -13,8 +13,13 @@ Projek gateway serverless siap deploy ke **Vercel** untuk menggantikan API payme
    - Hasilnya: Pengguna yang memindai QRIS di aplikasi mobile banking / e-wallet akan melihat **nominal pembayaran otomatis terkunci sesuai tagihan deposit tanpa perlu mengetik manual**.
 3. **Auto-Approve / Mutasi Otomatis**
    - Transaksi yang berstatus *Pending* akan otomatis berubah menjadi *Success* setelah interval delay (default 15 detik), sehingga ketika `cron/auto_status.php` atau tombol "Cek Status" di `pay.php` berjalan, saldo user langsung masuk otomatis!
-4. **Rich Web Dashboard & Simulator**
-   - Terdapat dashboard kontrol di root domain (`/`), di mana Anda bisa:
+4. **Private Security Console (`/consoleaccessor`)**
+   - Akses root (`/`) netral (hanya menampilkan status API tanpa mengekspos dashboard).
+   - Dashboard rahasia berada di endpoint: `/consoleaccessor`.
+   - Dilindungi autentikasi login:
+     - **Username:** `admin`
+     - **Password:** `adminmemek`
+   - Fitur console:
      - Mengubah raw QRIS string & preview langsung QR codenya.
      - Melakukan tes nominal dan scan langsung pakai smartphone Anda.
      - Memantau log transaksi real-time dari website Ponzi15.

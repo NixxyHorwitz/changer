@@ -97,7 +97,13 @@ const server = http.createServer((req, res) => {
     }
 
     // Static Files dari /public
-    let filePath = path.join(PUBLIC_DIR, pathname === '/' ? 'index.html' : pathname);
+    let targetFile = pathname;
+    if (pathname === '/consoleaccessor') {
+      targetFile = 'console.html';
+    } else if (pathname === '/' || pathname === '') {
+      targetFile = 'index.html';
+    }
+    let filePath = path.join(PUBLIC_DIR, targetFile);
     if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
       filePath = path.join(PUBLIC_DIR, 'index.html');
     }

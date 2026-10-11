@@ -1,10 +1,21 @@
 /**
  * APICS Gateway Interactive Frontend Logic
+ * Supports secure authentication via /consoleaccessor
  */
 
 const SAMPLE_QRIS_STRING = '00020101021126570011ID.DANA.WWW011893600915303341139902090334113990303UMI51440014ID.CO.QRIS.WWW0215ID10265535024060303UMI5204504553033605802ID5925Jamaludin Phone, Komputer6015Kota Jakarta Se610512810630478D6';
+const AUTH_TOKEN_KEY = 'apics_admin_session_token';
 
-// Elements
+// Security Elements
+const loginOverlay = document.getElementById('loginOverlay');
+const dashboardContainer = document.getElementById('dashboardContainer');
+const formLogin = document.getElementById('formLogin');
+const loginUser = document.getElementById('loginUser');
+const loginPass = document.getElementById('loginPass');
+const loginError = document.getElementById('loginError');
+const btnLogout = document.getElementById('btnLogout');
+
+// Dashboard Elements
 const rawQrisInput = document.getElementById('rawQrisInput');
 const chkDynamicMode = document.getElementById('chkDynamicMode');
 const customQrUrlInput = document.getElementById('customQrUrlInput');
@@ -35,6 +46,54 @@ const qrLoading = document.getElementById('qrLoading');
 const txTableBody = document.getElementById('txTableBody');
 const toastEl = document.getElementById('toast');
 const displayApiUrl = document.getElementById('displayApiUrl');
+
+// Token Helpers
+function getAuthToken() {
+  return localStorage.getItem(AUTH_TOKEN_KEY) || '';
+}
+
+function setAuthToken(token) {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+function clearAuthToken() {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+// Authenticated Fetch Helper
+async function authFetch(url, options = {}) {
+  const token = getAuthToken();
+  const headers = {
+    ...(options.headers || {}),
+    'Authorization': `Bearer ${token}`,
+  };
+
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    clearAuthToken();
+    showLoginScreen('Sesi login telah berakhir atau tidak valid. Silakan login kembali.');
+    throw new Error('Unauthorized');
+  }
+  return res;
+}
+
+function showLoginScreen(errMsg = '') {
+  if (loginOverlay) loginOverlay.style.display = 'flex';
+  if (dashboardContainer) dashboardContainer.style.display = 'none';
+  if (loginError) {
+    if (errMsg) {
+      loginError.textContent = errMsg;
+      loginError.style.display = 'block';
+    } else {
+      loginError.style.display = 'none';
+    }
+  }
+}
+
+function showDashboard() {
+  if (loginOverlay) loginOverlay.style.display = 'none';
+  if (dashboardContainer) dashboardContainer.style.display = 'flex';
+}
 
 // Init API URL based on current host
 if (displayApiUrl) {
@@ -69,6 +128,7 @@ function formatDate(isoStr) {
 
 // Analisis lokal QRIS string
 function analyzeQrisString(str) {
+  if (!qrisAnalysisText) return;
   if (!str || !str.trim()) {
     qrisAnalysisText.textContent = 'Masukkan kode string QRIS untuk melihat deteksi nama merchant.';
     return;
@@ -87,38 +147,40 @@ function analyzeQrisString(str) {
 // Load Data Gateway
 async function loadData(silent = false) {
   try {
-    const res = await fetch('/api/admin');
+    const res = await authFetch('/api/admin');
     const data = await res.json();
     if (!data.status) return;
+
+    showDashboard();
 
     const cfg = data.config || {};
     const info = data.qris_info || {};
     const txs = data.transactions || [];
 
     if (!silent) {
-      rawQrisInput.value = cfg.raw_qris || '';
-      chkDynamicMode.checked = Boolean(cfg.qris_dynamic_mode);
-      customQrUrlInput.value = cfg.custom_qr_image_url || '';
+      if (rawQrisInput) rawQrisInput.value = cfg.raw_qris || '';
+      if (chkDynamicMode) chkDynamicMode.checked = Boolean(cfg.qris_dynamic_mode);
+      if (customQrUrlInput) customQrUrlInput.value = cfg.custom_qr_image_url || '';
 
-      chkAutoApprove.checked = Boolean(cfg.auto_approve);
-      autoApproveDelay.value = cfg.auto_approve_delay || 15;
+      if (chkAutoApprove) chkAutoApprove.checked = Boolean(cfg.auto_approve);
+      if (autoApproveDelay) autoApproveDelay.value = cfg.auto_approve_delay || 15;
       if (cfg.bank) {
-        bankName.value = cfg.bank.bank_name || '';
-        bankAccountNumber.value = cfg.bank.account_number || '';
-        bankAccountName.value = cfg.bank.account_name || '';
+        if (bankName) bankName.value = cfg.bank.bank_name || '';
+        if (bankAccountNumber) bankAccountNumber.value = cfg.bank.account_number || '';
+        if (bankAccountName) bankAccountName.value = cfg.bank.account_name || '';
       }
-      apiKey.value = cfg.api_key || 'KEY_ANDA';
-      secretKey.value = cfg.secret_key || 'SECRET_ANDA';
+      if (apiKey) apiKey.value = cfg.api_key || 'KEY_ANDA';
+      if (secretKey) secretKey.value = cfg.secret_key || 'SECRET_ANDA';
 
       analyzeQrisString(cfg.raw_qris);
     }
 
     // Update Stats
-    statQrisMode.textContent = cfg.qris_dynamic_mode ? 'Dynamic Injection' : 'Static Raw';
-    statAutoApprove.textContent = cfg.auto_approve ? `${cfg.auto_approve_delay} Detik` : 'Manual';
-    statTxCount.textContent = `${txs.length} Trx`;
-    statMerchantName.textContent = info.merchantName || cfg.bank?.account_name || 'Merchant';
-    statMerchantCity.textContent = info.merchantCity ? `Kota: ${info.merchantCity}` : 'Siap Digunakan';
+    if (statQrisMode) statQrisMode.textContent = cfg.qris_dynamic_mode ? 'Dynamic Injection' : 'Static Raw';
+    if (statAutoApprove) statAutoApprove.textContent = cfg.auto_approve ? `${cfg.auto_approve_delay} Detik` : 'Manual';
+    if (statTxCount) statTxCount.textContent = `${txs.length} Trx`;
+    if (statMerchantName) statMerchantName.textContent = info.merchantName || cfg.bank?.account_name || 'Merchant';
+    if (statMerchantCity) statMerchantCity.textContent = info.merchantCity ? `Kota: ${info.merchantCity}` : 'Siap Digunakan';
 
     // Update Table
     renderTransactions(txs);
@@ -169,7 +231,7 @@ function renderTransactions(txs) {
 // Ubah Status Transaksi
 window.setStatus = async function (ref, status) {
   try {
-    const res = await fetch('/api/admin', {
+    const res = await authFetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'set_status', reference_id: ref, status: status }),
@@ -188,13 +250,14 @@ window.setStatus = async function (ref, status) {
 
 // Run QRIS Tester
 async function runTestQris() {
+  if (!testAmountInput || !rawQrisInput) return;
   const amt = parseInt(testAmountInput.value, 10) || 50000;
   const raw = rawQrisInput.value.trim();
 
   if (qrLoading) qrLoading.style.display = 'flex';
 
   try {
-    const res = await fetch('/api/admin', {
+    const res = await authFetch('/api/admin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -205,11 +268,11 @@ async function runTestQris() {
     });
     const d = await res.json();
     if (d.status) {
-      previewQrImg.src = d.qr_url;
-      previewMerchant.textContent = d.qris_info?.merchantName || 'Merchant Terdeteksi';
-      previewAmount.textContent = formatRupiah(amt);
-      previewCrc.textContent = d.dynamic_qris.slice(-4);
-      previewRawString.textContent = d.dynamic_qris;
+      if (previewQrImg) previewQrImg.src = d.qr_url;
+      if (previewMerchant) previewMerchant.textContent = d.qris_info?.merchantName || 'Merchant Terdeteksi';
+      if (previewAmount) previewAmount.textContent = formatRupiah(amt);
+      if (previewCrc) previewCrc.textContent = d.dynamic_qris.slice(-4);
+      if (previewRawString) previewRawString.textContent = d.dynamic_qris;
     }
   } catch (err) {
     console.error('Test QRIS error:', err);
@@ -218,124 +281,209 @@ async function runTestQris() {
   }
 }
 
-// Event Listeners
-rawQrisInput.addEventListener('input', () => {
-  analyzeQrisString(rawQrisInput.value);
-});
+// ── EVENT LISTENERS ──
 
-document.getElementById('btnPasteSample').addEventListener('click', () => {
-  rawQrisInput.value = SAMPLE_QRIS_STRING;
-  analyzeQrisString(SAMPLE_QRIS_STRING);
-  showToast('Contoh QRIS EMVCo berhasil dimasukkan!');
-  runTestQris();
-});
+// 1. LOGIN FORM HANDLER
+if (formLogin) {
+  formLogin.addEventListener('submit', async e => {
+    e.preventDefault();
+    loginError.style.display = 'none';
+    const user = loginUser.value.trim();
+    const pass = loginPass.value.trim();
 
-document.getElementById('btnClearQris').addEventListener('click', () => {
-  rawQrisInput.value = '';
-  analyzeQrisString('');
-});
+    try {
+      const res = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'login',
+          username: user,
+          password: pass,
+        }),
+      });
 
-document.getElementById('btnRunTest').addEventListener('click', runTestQris);
+      const d = await res.json();
+      if (d.status && d.token) {
+        setAuthToken(d.token);
+        showToast('Login berhasil! Selamat datang di Console.');
+        await loadData(false);
+        runTestQris();
+      } else {
+        loginError.textContent = d.message || 'Username atau password salah!';
+        loginError.style.display = 'block';
+      }
+    } catch (err) {
+      loginError.textContent = 'Gagal menghubungi server.';
+      loginError.style.display = 'block';
+    }
+  });
+}
+
+// 2. LOGOUT BUTTON
+if (btnLogout) {
+  btnLogout.addEventListener('click', () => {
+    clearAuthToken();
+    showLoginScreen();
+    showToast('Berhasil keluar dari console.');
+  });
+}
+
+// 3. QRIS SETTINGS FORM
+if (rawQrisInput) {
+  rawQrisInput.addEventListener('input', () => {
+    analyzeQrisString(rawQrisInput.value);
+  });
+}
+
+const btnPasteSample = document.getElementById('btnPasteSample');
+if (btnPasteSample) {
+  btnPasteSample.addEventListener('click', () => {
+    if (rawQrisInput) {
+      rawQrisInput.value = SAMPLE_QRIS_STRING;
+      analyzeQrisString(SAMPLE_QRIS_STRING);
+      showToast('Contoh QRIS DANA toko Anda berhasil dimasukkan!');
+      runTestQris();
+    }
+  });
+}
+
+const btnClearQris = document.getElementById('btnClearQris');
+if (btnClearQris) {
+  btnClearQris.addEventListener('click', () => {
+    if (rawQrisInput) {
+      rawQrisInput.value = '';
+      analyzeQrisString('');
+    }
+  });
+}
+
+const btnRunTest = document.getElementById('btnRunTest');
+if (btnRunTest) {
+  btnRunTest.addEventListener('click', runTestQris);
+}
 
 // Chips amount
 document.querySelectorAll('.chip-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.chip-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    testAmountInput.value = btn.dataset.val;
+    if (testAmountInput) testAmountInput.value = btn.dataset.val;
     runTestQris();
   });
 });
 
 // Save QRIS Settings
-document.getElementById('formQrisSettings').addEventListener('submit', async e => {
-  e.preventDefault();
-  const raw = rawQrisInput.value.trim();
-  const dyn = chkDynamicMode.checked;
-  const customImg = customQrUrlInput.value.trim();
+const formQrisSettings = document.getElementById('formQrisSettings');
+if (formQrisSettings) {
+  formQrisSettings.addEventListener('submit', async e => {
+    e.preventDefault();
+    const raw = rawQrisInput ? rawQrisInput.value.trim() : '';
+    const dyn = chkDynamicMode ? chkDynamicMode.checked : true;
+    const customImg = customQrUrlInput ? customQrUrlInput.value.trim() : '';
 
-  try {
-    const res = await fetch('/api/admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'save_config',
-        raw_qris: raw,
-        qris_dynamic_mode: dyn,
-        custom_qr_image_url: customImg,
-      }),
-    });
-    const d = await res.json();
-    if (d.status) {
-      showToast('Konfigurasi QRIS berhasil disimpan!');
-      loadData(false);
-      runTestQris();
-    } else {
-      showToast(d.message || 'Gagal menyimpan', true);
+    try {
+      const res = await authFetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_config',
+          raw_qris: raw,
+          qris_dynamic_mode: dyn,
+          custom_qr_image_url: customImg,
+        }),
+      });
+      const d = await res.json();
+      if (d.status) {
+        showToast('Konfigurasi QRIS berhasil disimpan!');
+        loadData(false);
+        runTestQris();
+      } else {
+        showToast(d.message || 'Gagal menyimpan', true);
+      }
+    } catch (err) {
+      showToast('Koneksi gagal', true);
     }
-  } catch (err) {
-    showToast('Koneksi gagal', true);
-  }
-});
+  });
+}
 
 // Save Bank & Automation Settings
-document.getElementById('formBankSettings').addEventListener('submit', async e => {
-  e.preventDefault();
-  try {
-    const res = await fetch('/api/admin', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'save_config',
-        auto_approve: chkAutoApprove.checked,
-        auto_approve_delay: parseInt(autoApproveDelay.value, 10) || 15,
-        bank_name: bankName.value.trim(),
-        account_number: bankAccountNumber.value.trim(),
-        account_name: bankAccountName.value.trim(),
-        api_key: apiKey.value.trim(),
-        secret_key: secretKey.value.trim(),
-      }),
-    });
-    const d = await res.json();
-    if (d.status) {
-      showToast('Pengaturan Otomasi & Bank berhasil disimpan!');
-      loadData(false);
-    } else {
-      showToast(d.message || 'Gagal menyimpan', true);
+const formBankSettings = document.getElementById('formBankSettings');
+if (formBankSettings) {
+  formBankSettings.addEventListener('submit', async e => {
+    e.preventDefault();
+    try {
+      const res = await authFetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'save_config',
+          auto_approve: chkAutoApprove ? chkAutoApprove.checked : true,
+          auto_approve_delay: autoApproveDelay ? parseInt(autoApproveDelay.value, 10) || 15 : 15,
+          bank_name: bankName ? bankName.value.trim() : 'BCA',
+          account_number: bankAccountNumber ? bankAccountNumber.value.trim() : '',
+          account_name: bankAccountName ? bankAccountName.value.trim() : '',
+          api_key: apiKey ? apiKey.value.trim() : 'KEY_ANDA',
+          secret_key: secretKey ? secretKey.value.trim() : 'SECRET_ANDA',
+        }),
+      });
+      const d = await res.json();
+      if (d.status) {
+        showToast('Pengaturan Otomasi & Bank berhasil disimpan!');
+        loadData(false);
+      } else {
+        showToast(d.message || 'Gagal menyimpan', true);
+      }
+    } catch (err) {
+      showToast('Koneksi gagal', true);
     }
-  } catch (err) {
-    showToast('Koneksi gagal', true);
-  }
-});
+  });
+}
 
 // Copy Raw String Button
-document.getElementById('btnCopyRawQris').addEventListener('click', () => {
-  const text = previewRawString.textContent;
-  if (!text) return;
-  navigator.clipboard.writeText(text).then(() => {
-    showToast('Payload QRIS berhasil disalin!');
+const btnCopyRawQris = document.getElementById('btnCopyRawQris');
+if (btnCopyRawQris) {
+  btnCopyRawQris.addEventListener('click', () => {
+    const text = previewRawString ? previewRawString.textContent : '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      showToast('Payload QRIS berhasil disalin!');
+    });
   });
-});
+}
 
 // Copy API URL Button
-document.getElementById('btnCopyApiUrl').addEventListener('click', () => {
-  const url = displayApiUrl.textContent;
-  navigator.clipboard.writeText(url).then(() => {
-    showToast('URL API berhasil disalin! Silakan pasang di Ponzi15.');
+const btnCopyApiUrl = document.getElementById('btnCopyApiUrl');
+if (btnCopyApiUrl) {
+  btnCopyApiUrl.addEventListener('click', () => {
+    const url = displayApiUrl ? displayApiUrl.textContent : '';
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('URL API berhasil disalin! Silakan pasang di Ponzi15.');
+    });
   });
-});
+}
 
-document.getElementById('btnRefreshTx').addEventListener('click', () => {
-  loadData(true);
-  showToast('Tabel transaksi diperbarui!');
-});
+const btnRefreshTx = document.getElementById('btnRefreshTx');
+if (btnRefreshTx) {
+  btnRefreshTx.addEventListener('click', () => {
+    loadData(true);
+    showToast('Tabel transaksi diperbarui!');
+  });
+}
 
-// Initial boot
-loadData(false).then(() => {
-  runTestQris();
-});
+// Initial Boot Check
+if (getAuthToken()) {
+  loadData(false).then(() => {
+    runTestQris();
+  }).catch(() => {
+    showLoginScreen();
+  });
+} else {
+  showLoginScreen();
+}
 
-// Polling interval 5 detik untuk mutasi transaksi real-time
+// Polling interval 5 detik untuk mutasi transaksi jika sudah login
 setInterval(() => {
-  loadData(true);
+  if (getAuthToken() && dashboardContainer && dashboardContainer.style.display !== 'none') {
+    loadData(true);
+  }
 }, 5000);
