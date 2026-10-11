@@ -1,6 +1,7 @@
 /**
  * QRIS (Quick Response Code Indonesian Standard) EMVCo Utility
  * Handles dynamic amount injection & CRC16 checksum calculation
+ * Preserves original spacing, UTF characters, and TLV length integrity.
  */
 
 // CRC-16/CCITT-FALSE (Polynomial: 0x1021, Initial: 0xFFFF)
@@ -20,55 +21,80 @@ function calculateCRC16(data) {
 }
 
 /**
+ * Standard EMVCo TLV Parser
+ * Parses root tags while strictly respecting length headers (spaces preserved).
+ */
+function parseTLV(str) {
+  const tags = [];
+  let i = 0;
+  while (i < str.length) {
+    if (i + 4 > str.length) break;
+    const tag = str.substr(i, 2);
+    const len = parseInt(str.substr(i + 2, 2), 10);
+    if (isNaN(len)) break;
+    const val = str.substr(i + 4, len);
+    tags.push({ tag, len, val });
+    i += 4 + len;
+  }
+  return tags;
+}
+
+/**
  * Mengubah QRIS Statis menjadi QRIS Dinamis dengan menginjeksi nominal otomatis (Tag 54)
+ * Menjaga spasi pada nama merchant (Tag 59) dan kota (Tag 60) agar tidak merusak panjang TLV.
  * @param {string} rawQris - Raw string QRIS asli (statis/dinamis)
  * @param {number} amount - Nominal transaksi (contoh: 50000)
  * @returns {string} - Raw QRIS string dinamis siap scan
  */
 function convertQrisToDynamic(rawQris, amount) {
   if (!rawQris || typeof rawQris !== 'string') return '';
-  let qrisStr = rawQris.trim();
+  const str = rawQris.trim();
+  const tags = parseTLV(str);
+  if (!tags.length) return str;
 
-  // Bersihkan karakter aneh atau spasi
-  qrisStr = qrisStr.replace(/\s+/g, '');
-
-  // Potong tag CRC lama (6304XXXX) di bagian akhir
-  if (qrisStr.length > 8 && qrisStr.slice(-8, -4) === '6304') {
-    qrisStr = qrisStr.slice(0, -8);
-  } else if (qrisStr.includes('6304')) {
-    const lastIdx = qrisStr.lastIndexOf('6304');
-    qrisStr = qrisStr.slice(0, lastIdx);
-  }
-
-  // Ubah tipe inisiasi: 010211 (Statis) -> 010212 (Dinamis)
-  if (qrisStr.includes('010211')) {
-    qrisStr = qrisStr.replace('010211', '010212');
-  }
-
-  // Siapkan Tag 54 (Transaction Amount)
+  let built = '';
   const amountInt = Math.floor(Number(amount) || 0);
   const amountStr = amountInt.toString();
-  const lenStr = amountStr.length.toString().padStart(2, '0');
-  const tag54 = '54' + lenStr + amountStr;
+  const tag54 = '54' + amountStr.length.toString().padStart(2, '0') + amountStr;
 
-  // Standar EMVCo QRIS Indonesia: Tag 54 disisipkan sebelum Tag 58 (5802ID)
-  if (qrisStr.includes('5802ID')) {
-    const parts = qrisStr.split('5802ID');
-    let partBefore = parts[0];
-    
-    // Hapus Tag 54 lama jika sudah pernah ada sebelum 5802ID
-    partBefore = partBefore.replace(/54\d{2}\d+$/, '');
-    
-    qrisStr = partBefore + tag54 + '5802ID' + parts.slice(1).join('5802ID');
-  } else {
-    // Fallback jika tidak ada tag 5802ID
-    qrisStr = qrisStr + tag54;
+  let has54 = false;
+  for (const t of tags) {
+    // Lewati tag CRC 63 lama (akan dihitung ulang)
+    if (t.tag === '63') continue;
+
+    // Ubah tipe inisiasi: 010211 (Statis) -> 010212 (Dinamis)
+    if (t.tag === '01') {
+      built += '010212';
+      continue;
+    }
+
+    // Jika Tag 54 sudah ada, ganti dengan nominal baru
+    if (t.tag === '54') {
+      built += tag54;
+      has54 = true;
+      continue;
+    }
+
+    // Standar EMVCo: Tag 54 disisipkan tepat sebelum Tag 58 (Country Code 'ID')
+    if (t.tag === '58' && !has54) {
+      built += tag54;
+      has54 = true;
+    }
+
+    // Pertahankan nilai asli tag termasuk spasi agar panjang byte tidak melenceng
+    const lenStr = t.len.toString().padStart(2, '0');
+    built += t.tag + lenStr + t.val;
   }
 
-  // Tambahkan tag CRC 6304 dan hitung checksum
-  qrisStr += '6304';
-  const crc = calculateCRC16(qrisStr);
-  return qrisStr + crc;
+  // Fallback jika tidak ada tag 58
+  if (!has54) {
+    built += tag54;
+  }
+
+  // Tambahkan Tag 6304 dan kalkulasi CRC16
+  built += '6304';
+  const crc = calculateCRC16(built);
+  return built + crc;
 }
 
 /**
@@ -77,46 +103,39 @@ function convertQrisToDynamic(rawQris, amount) {
 function parseQrisInfo(rawQris) {
   if (!rawQris || typeof rawQris !== 'string') return null;
   const str = rawQris.trim();
-  
+  const tags = parseTLV(str);
+
   const info = {
     isValid: str.startsWith('000201'),
     merchantName: '',
     merchantCity: '',
-    isDynamic: str.includes('010212'),
+    isDynamic: false,
     amount: null,
   };
 
-  // Tag 59: Merchant Name
-  const mName = str.match(/59(\d{2})([A-Za-z0-9\s\.\-_]+)/);
-  if (mName && mName[1] && mName[2]) {
-    const len = parseInt(mName[1], 10);
-    info.merchantName = mName[2].slice(0, len).trim();
-  }
-
-  // Tag 60: Merchant City
-  const mCity = str.match(/60(\d{2})([A-Za-z0-9\s\.\-_]+)/);
-  if (mCity && mCity[1] && mCity[2]) {
-    const len = parseInt(mCity[1], 10);
-    info.merchantCity = mCity[2].slice(0, len).trim();
-  }
-
-  // Tag 54: Amount
-  const mAmount = str.match(/54(\d{2})(\d+)/);
-  if (mAmount && mAmount[1] && mAmount[2]) {
-    const len = parseInt(mAmount[1], 10);
-    info.amount = parseInt(mAmount[2].slice(0, len), 10);
+  for (const t of tags) {
+    if (t.tag === '01') {
+      info.isDynamic = (t.val === '12');
+    } else if (t.tag === '54') {
+      info.amount = parseInt(t.val, 10);
+    } else if (t.tag === '59') {
+      info.merchantName = t.val.trim();
+    } else if (t.tag === '60') {
+      info.merchantCity = t.val.trim();
+    }
   }
 
   return info;
 }
 
 /**
- * Default Template QRIS (Jika user belum memasukkan QRIS sendiri)
+ * Default Template QRIS Toko User
  */
 const DEFAULT_SAMPLE_QRIS = '00020101021126570011ID.DANA.WWW011893600915303341139902090334113990303UMI51440014ID.CO.QRIS.WWW0215ID10265535024060303UMI5204504553033605802ID5925Jamaludin Phone, Komputer6015Kota Jakarta Se610512810630478D6';
 
 module.exports = {
   calculateCRC16,
+  parseTLV,
   convertQrisToDynamic,
   parseQrisInfo,
   DEFAULT_SAMPLE_QRIS,
