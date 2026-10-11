@@ -20,8 +20,7 @@
     { "source": "/api/admin", "destination": "/api/admin" },
     { "source": "/api/qr", "destination": "/api/qr" },
 
-    { "source": "/consoleaccessor", "destination": "/public/console.html" },
-    { "source": "/", "destination": "/public/index.html" },
-    { "source": "/((?!api/).*)", "destination": "/public/$1" }
+    { "source": "/consoleaccessor", "destination": "/console.html" },
+    { "source": "/consoleaccessor/", "destination": "/console.html" }
   ]
 }
