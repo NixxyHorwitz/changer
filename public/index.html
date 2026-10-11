@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>APICS Payment Gateway — Custom QRIS & Mock Server</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background lighting -->
+  <div class="ambient-glow bg-glow-1"></div>
+  <div class="ambient-glow bg-glow-2"></div>
+  <div class="ambient-grid"></div>
+
+  <div class="app-container">
+    <!-- TOP NAVIGATION -->
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+            <path d="M14 14h3v3h-3z"></path>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <span class="brand-title">APICS <span class="badge-tag">SERVERLESS</span></span>
+          <span class="brand-sub">Custom QRIS Gateway for Ponzi15</span>
+        </div>
+      </div>
+
+      <div class="topbar-actions">
+        <div class="status-indicator">
+          <span class="pulse-dot"></span>
+          <span class="status-text">Gateway Online (Vercel Ready)</span>
+        </div>
+        <a href="#integration-section" class="btn-sm btn-ghost">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          Cara Pasang
+        </a>
+      </div>
+    </header>
+
+    <!-- HERO NOTIFICATION / STATS -->
+    <section class="hero-stats">
+      <div class="stat-card">
+        <span class="stat-label">Mode QRIS</span>
+        <div class="stat-value text-emerald" id="statQrisMode">Dynamic Injection</div>
+        <span class="stat-desc">Nominal otomatis masuk ke m-banking</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Auto-Mutasi Status</span>
+        <div class="stat-value text-amber" id="statAutoApprove">15 Detik</div>
+        <span class="stat-desc">Transaksi otomatis Sukses</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Total Transaksi</span>
+        <div class="stat-value text-cyan" id="statTxCount">0 Trx</div>
+        <span class="stat-desc">Riwayat simulasi aktif</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Merchant Terdeteksi</span>
+        <div class="stat-value text-white" id="statMerchantName">-</div>
+        <span class="stat-desc" id="statMerchantCity">Dari String QRIS</span>
+      </div>
+    </section>
+
+    <!-- MAIN TWO-COLUMN WORKSPACE -->
+    <main class="grid-workspace">
+
+      <!-- LEFT COLUMN: QRIS & GATEWAY SETTINGS -->
+      <div class="workspace-col">
+
+        <!-- CARD 1: RAW QRIS SETTINGS -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="header-icon icon-crimson">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3z"/></svg>
+            </div>
+            <div>
+              <h2 class="card-title">Kustomisasi Raw QRIS Anda</h2>
+              <p class="card-subtitle">Paste kode QRIS statis dari toko/merchant Anda (BCA, DANA, GoPay, Shopee, dsb)</p>
+            </div>
+          </div>
+
+          <form id="formQrisSettings">
+            <div class="form-group">
+              <div class="label-row">
+                <label for="rawQrisInput">Raw QRIS String (EMVCo Code)</label>
+                <div class="label-actions">
+                  <button type="button" class="btn-text-action" id="btnPasteSample">Pakai Contoh</button>
+                  <button type="button" class="btn-text-action" id="btnClearQris">Kosongkan</button>
+                </div>
+              </div>
+              <textarea id="rawQrisInput" rows="5" class="form-textarea" placeholder="Paste kode QRIS Anda di sini, diawali dengan 000201010211..."></textarea>
+              <div class="field-hint" id="qrisAnalysisBox">
+                <span class="hint-bullet">ℹ️</span>
+                <span id="qrisAnalysisText">Masukkan kode string QRIS untuk melihat deteksi nama merchant.</span>
+              </div>
+            </div>
+
+            <div class="toggle-group">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chkDynamicMode" checked>
+                <span class="slider"></span>
+              </label>
+              <div class="toggle-label">
+                <strong>Injeksi Nominal Otomatis (Dynamic QRIS)</strong>
+                <span>Sistem otomatis menyisipkan nominal tagihan (Tag 54) &amp; menghitung ulang CRC16, sehingga user m-banking tidak perlu ketik nominal manual!</span>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 14px;">
+              <label for="customQrUrlInput">Custom QR Image URL (Opsional / Fallback)</label>
+              <input type="text" id="customQrUrlInput" class="form-input" placeholder="https://example.com/my-qris-image.png (biarkan kosong jika ingin QR render otomatis)">
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-primary" id="btnSaveQris">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
+                Simpan Konfigurasi QRIS
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- CARD 2: AUTOMATION & BANK SETTINGS -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="header-icon icon-sapphire">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+            <div>
+              <h2 class="card-title">Otomasi Mutasi &amp; Metode Bank</h2>
+              <p class="card-subtitle">Pengaturan auto-approve dan rekening transfer</p>
+            </div>
+          </div>
+
+          <form id="formBankSettings">
+            <div class="toggle-group" style="margin-bottom: 16px;">
+              <label class="toggle-switch">
+                <input type="checkbox" id="chkAutoApprove" checked>
+                <span class="slider"></span>
+              </label>
+              <div class="toggle-label">
+                <strong>Auto-Approve Transaksi (Mutasi Otomatis)</strong>
+                <span>Setelah deposit dibuat, status otomatis menjadi "Success" setelah durasi waktu delay selesai.</span>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="autoApproveDelay">Delay Auto-Approve (Detik)</label>
+                <input type="number" id="autoApproveDelay" class="form-input" value="15" min="0" max="300">
+                <small class="text-muted">Rekomendasi: 15 detik (sesuai refresh pay.php)</small>
+              </div>
+
+              <div class="form-group flex-1">
+                <label for="bankName">Nama Bank Transfer</label>
+                <input type="text" id="bankName" class="form-input" value="BCA">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="bankAccountNumber">Nomor Rekening / VA</label>
+                <input type="text" id="bankAccountNumber" class="form-input" value="8830192837">
+              </div>
+
+              <div class="form-group flex-1">
+                <label for="bankAccountName">Nama Pemilik Rekening</label>
+                <input type="text" id="bankAccountName" class="form-input" value="PT GERBANG PEMBAYARAN">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group flex-1">
+                <label for="apiKey">API Key (Header X-API-KEY)</label>
+                <input type="text" id="apiKey" class="form-input" value="KEY_ANDA">
+              </div>
+
+              <div class="form-group flex-1">
+                <label for="secretKey">Secret Key (Header X-SECRET-KEY)</label>
+                <input type="text" id="secretKey" class="form-input" value="SECRET_ANDA">
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn-secondary" id="btnSaveBank">
+                Simpan Pengaturan Otomasi
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: LIVE SIMULATOR & TRANSACTION MONITOR -->
+      <div class="workspace-col">
+
+        <!-- CARD 3: LIVE QRIS TESTER & SCAN PREVIEW -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="header-icon icon-emerald">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+            </div>
+            <div>
+              <h2 class="card-title">Live QRIS Tester &amp; Preview</h2>
+              <p class="card-subtitle">Cek hasil QR Code dan coba scan menggunakan ponsel Anda</p>
+            </div>
+          </div>
+
+          <div class="tester-wrap">
+            <div class="tester-controls">
+              <div class="form-group">
+                <label for="testAmountInput">Nominal Tes Deposit (Rp)</label>
+                <div class="input-with-addons">
+                  <span class="input-prefix">Rp</span>
+                  <input type="number" id="testAmountInput" class="form-input" value="50000" step="1000">
+                  <button type="button" class="btn btn-emerald" id="btnRunTest">Test QR</button>
+                </div>
+              </div>
+              <div class="chips-row">
+                <button type="button" class="chip-btn" data-val="25000">25.000</button>
+                <button type="button" class="chip-btn active" data-val="50000">50.000</button>
+                <button type="button" class="chip-btn" data-val="100000">100.000</button>
+                <button type="button" class="chip-btn" data-val="250000">250.000</button>
+              </div>
+            </div>
+
+            <div class="qr-render-plate">
+              <div class="qr-box">
+                <img id="previewQrImg" src="" alt="QRIS Live Preview">
+                <div class="qr-loading" id="qrLoading">Membuat QRIS...</div>
+              </div>
+              <div class="qr-meta">
+                <div class="qr-meta-row">
+                  <span>Merchant:</span>
+                  <strong id="previewMerchant">-</strong>
+                </div>
+                <div class="qr-meta-row">
+                  <span>Nominal:</span>
+                  <strong class="text-emerald" id="previewAmount">Rp 50.000</strong>
+                </div>
+                <div class="qr-meta-row">
+                  <span>CRC16:</span>
+                  <strong class="font-mono" id="previewCrc">-</strong>
+                </div>
+              </div>
+            </div>
+
+            <div class="raw-string-box">
+              <div class="raw-string-head">
+                <span>Payload QRIS yang Diberikan ke Web:</span>
+                <button type="button" class="btn-copy-sm" id="btnCopyRawQris">Salin Payload</button>
+              </div>
+              <pre class="raw-string-content" id="previewRawString"></pre>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 4: REALTIME TRANSACTIONS LIST -->
+        <div class="panel-card">
+          <div class="card-header">
+            <div class="header-icon icon-purple">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div style="flex:1;">
+              <h2 class="card-title">Riwayat Transaksi Real-Time</h2>
+              <p class="card-subtitle">Daftar transaksi dari Ponzi15 (Auto-Refresh tiap 5 detik)</p>
+            </div>
+            <button type="button" class="btn-sm btn-ghost" id="btnRefreshTx">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+              Refresh
+            </button>
+          </div>
+
+          <div class="tx-table-container">
+            <table class="tx-table">
+              <thead>
+                <tr>
+                  <th>Waktu</th>
+                  <th>Reference ID</th>
+                  <th>Metode</th>
+                  <th>Nominal</th>
+                  <th>Status</th>
+                  <th>Aksi Manual</th>
+                </tr>
+              </thead>
+              <tbody id="txTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-4">Belum ada transaksi. Silakan coba deposit di ponzi15.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </main>
+
+    <!-- INTEGRATION GUIDE ACCORDION -->
+    <section class="integration-guide" id="integration-section">
+      <div class="guide-header">
+        <div class="header-icon icon-amber">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        </div>
+        <div>
+          <h2 class="card-title">Panduan Menghubungkan ke Ponzi15</h2>
+          <p class="card-subtitle">Hanya perlu 1 langkah untuk menggantikan API bawaan dengan API Vercel ini</p>
+        </div>
+      </div>
+
+      <div class="guide-steps">
+        <div class="step-card">
+          <div class="step-badge">1</div>
+          <h3>Deploy ke Vercel</h3>
+          <p>Push folder <code>/apics</code> ini ke GitHub atau jalankan perintah <code>vercel deploy</code> di terminal folder <code>apics/</code>.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-badge">2</div>
+          <h3>Salin URL API Vercel Anda</h3>
+          <p>Setelah deploy, Anda akan mendapatkan domain Vercel. Contoh:</p>
+          <div class="code-pill">
+            <span id="displayApiUrl">https://projek-anda.vercel.app/api</span>
+            <button type="button" class="btn-copy-chip" id="btnCopyApiUrl">Salin</button>
+          </div>
+        </div>
+
+        <div class="step-card">
+          <div class="step-badge">3</div>
+          <h3>Masukkan ke Ponzi15</h3>
+          <p>Di database Ponzi15 (tabel <code>settings</code>, kolom <code>payment_api_base</code>) atau di menu Admin Pengaturan Web, ubah menjadi URL Vercel di atas.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="app-footer">
+      <span>APICS Serverless Gateway &bull; Designed for Google Antigravity IDE &bull; 100% EMVCo QRIS Compliant</span>
+    </footer>
+  </div>
+
+  <div id="toast" class="toast-popup"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

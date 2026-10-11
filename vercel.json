@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/methods.php", "destination": "/api/methods" },
+    { "source": "/methods.php", "destination": "/api/methods" },
+    { "source": "/api/methods", "destination": "/api/methods" },
+
+    { "source": "/api/deposit.php", "destination": "/api/deposit" },
+    { "source": "/deposit.php", "destination": "/api/deposit" },
+    { "source": "/api/deposit", "destination": "/api/deposit" },
+
+    { "source": "/api/status.php", "destination": "/api/status" },
+    { "source": "/status.php", "destination": "/api/status" },
+    { "source": "/api/status", "destination": "/api/status" },
+
+    { "source": "/api/withdraw.php", "destination": "/api/withdraw" },
+    { "source": "/withdraw.php", "destination": "/api/withdraw" },
+    { "source": "/api/withdraw", "destination": "/api/withdraw" },
+
+    { "source": "/api/admin", "destination": "/api/admin" },
+    { "source": "/api/qr", "destination": "/api/qr" },
+
+    { "source": "/((?!api/).*)", "destination": "/public/$1" }
+  ]
+}

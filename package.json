@@ -1,0 +1,22 @@
+{
+  "name": "apics-gateway",
+  "version": "1.0.0",
+  "description": "Mock & Custom QRIS Payment Gateway API Serverless for Vercel",
+  "main": "api/deposit.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "qris",
+    "payment-gateway",
+    "vercel",
+    "serverless",
+    "astelas"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "dependencies": {
+    "qrcode": "^1.5.3"
+  }
+}
