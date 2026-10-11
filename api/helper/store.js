@@ -1,5 +1,5 @@
 /**
- * In-Memory & Stateless Store with Cold-Boot Recovery
+ * In-Memory & Stateful Store with Cold-Boot Recovery
  * Designed specifically for Vercel Serverless Functions
  */
 
@@ -10,13 +10,13 @@ const { DEFAULT_SAMPLE_QRIS } = require('./qris');
 // File lokal untuk dev environment (fallback jika filesystem writeable)
 const DATA_FILE = path.join(__dirname, '..', '..', '.storage.json');
 
-// Default Configuration
+// Default Configuration: AUTO_APPROVE HARUS FALSE (TIDAK BOLEH AUTO SUKSES!)
 const DEFAULT_CONFIG = {
   raw_qris: process.env.CUSTOM_QRIS_RAW || DEFAULT_SAMPLE_QRIS,
   custom_qr_image_url: process.env.CUSTOM_QR_IMAGE_URL || '',
   qris_dynamic_mode: process.env.QRIS_DYNAMIC_MODE !== 'false', // Default true (injeksi nominal otomatis)
-  auto_approve: process.env.AUTO_APPROVE !== 'false', // Default true (auto sukses mutasi)
-  auto_approve_delay: parseInt(process.env.AUTO_APPROVE_DELAY || '15', 10), // 15 detik auto approve
+  auto_approve: false, // WAJIB FALSE: Transaksi harus menunggu konfirmasi pembayaran nyata/admin!
+  auto_approve_delay: 0,
   api_key: process.env.GATEWAY_API_KEY || 'KEY_ANDA',
   secret_key: process.env.GATEWAY_SECRET_KEY || 'SECRET_ANDA',
   bank: {
@@ -77,8 +77,6 @@ function updateConfig(newConfig) {
 /**
  * Buat reference ID unik yang membawa metadata waktu & nominal
  * Format: AST-{timestamp}-{amount}-{random}
- * Ini memungkinkan Vercel serverless merekonstruksi status transaksi
- * bahkan saat instance cold start!
  */
 function generateReferenceId(amount) {
   const ts = Date.now();
@@ -87,6 +85,8 @@ function generateReferenceId(amount) {
 }
 
 function addTransaction(tx) {
+  // Pastikan status awal SELALU pending
+  tx.status = 'pending';
   transactions.set(tx.reference_id, tx);
   saveStore();
   return tx;
@@ -109,7 +109,7 @@ function getTransaction(referenceId) {
           amount: amt,
           total_payment: amt,
           method: 'qris',
-          status: 'pending',
+          status: 'pending', // Selalu PENDING, tidak boleh auto-success!
           created_at: new Date(ts).toISOString(),
           paid_at: null,
           qris_payload: '',
@@ -119,29 +119,28 @@ function getTransaction(referenceId) {
     }
   }
 
-  if (!tx) return null;
-
-  // Cek Auto-Approve jika status masih pending
-  if (tx.status === 'pending' && currentConfig.auto_approve) {
-    const createdAt = new Date(tx.created_at).getTime();
-    const elapsedSeconds = (Date.now() - createdAt) / 1000;
-    if (elapsedSeconds >= currentConfig.auto_approve_delay) {
-      tx.status = 'success';
-      tx.paid_at = new Date().toISOString();
-      transactions.set(referenceId, tx);
-      saveStore();
-    }
-  }
-
+  // JANGAN PERNAH auto-flip ke success berdasarkan waktu!
   return tx;
 }
 
 function updateTransactionStatus(referenceId, newStatus) {
   let tx = getTransaction(referenceId);
-  if (!tx) return null;
-  tx.status = newStatus;
-  if (newStatus === 'success' && !tx.paid_at) {
-    tx.paid_at = new Date().toISOString();
+  if (!tx) {
+    // Jika belum ada di memori, buat objek transaksi baru
+    tx = {
+      reference_id: referenceId,
+      amount: 0,
+      total_payment: 0,
+      method: 'qris',
+      status: newStatus,
+      created_at: new Date().toISOString(),
+      paid_at: newStatus === 'success' ? new Date().toISOString() : null,
+    };
+  } else {
+    tx.status = newStatus;
+    if (newStatus === 'success' && !tx.paid_at) {
+      tx.paid_at = new Date().toISOString();
+    }
   }
   transactions.set(referenceId, tx);
   saveStore();
@@ -151,22 +150,6 @@ function updateTransactionStatus(referenceId, newStatus) {
 function getAllTransactions(limit = 50) {
   const list = Array.from(transactions.values());
   list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  
-  // Periksa auto approve untuk semua item pending
-  const now = Date.now();
-  if (currentConfig.auto_approve) {
-    list.forEach(tx => {
-      if (tx.status === 'pending') {
-        const createdAt = new Date(tx.created_at).getTime();
-        const elapsed = (now - createdAt) / 1000;
-        if (elapsed >= currentConfig.auto_approve_delay) {
-          tx.status = 'success';
-          tx.paid_at = new Date().toISOString();
-        }
-      }
-    });
-  }
-
   return list.slice(0, limit);
 }
 

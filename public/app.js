@@ -177,7 +177,7 @@ async function loadData(silent = false) {
 
     // Update Stats
     if (statQrisMode) statQrisMode.textContent = cfg.qris_dynamic_mode ? 'Dynamic Injection' : 'Static Raw';
-    if (statAutoApprove) statAutoApprove.textContent = cfg.auto_approve ? `${cfg.auto_approve_delay} Detik` : 'Manual';
+    if (statAutoApprove) statAutoApprove.textContent = cfg.auto_approve ? `${cfg.auto_approve_delay} Detik` : 'Manual (Aman)';
     if (statTxCount) statTxCount.textContent = `${txs.length} Trx`;
     if (statMerchantName) statMerchantName.textContent = info.merchantName || cfg.bank?.account_name || 'Merchant';
     if (statMerchantCity) statMerchantCity.textContent = info.merchantCity ? `Kota: ${info.merchantCity}` : 'Siap Digunakan';

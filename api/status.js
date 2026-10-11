@@ -30,12 +30,19 @@ module.exports = async (req, res) => {
     });
   }
 
-  // Aksi manual approve via GET/POST query (berguna untuk testing cepat)
+  // Aksi manual approve via URL (harus membawa secret adminmemek untuk keamanan)
   const action = String(query.action || body.action || '').toLowerCase();
+  const secret = String(query.secret || body.secret || '').trim();
+  const validSecret = process.env.ADMIN_PASS || 'adminmemek';
+
   if (action === 'approve' || action === 'success') {
-    updateTransactionStatus(refId, 'success');
+    if (secret === validSecret) {
+      updateTransactionStatus(refId, 'success');
+    }
   } else if (action === 'cancel' || action === 'expired' || action === 'failed') {
-    updateTransactionStatus(refId, 'expired');
+    if (secret === validSecret) {
+      updateTransactionStatus(refId, 'expired');
+    }
   }
 
   // Cari transaksi
@@ -43,7 +50,7 @@ module.exports = async (req, res) => {
 
   // Jika withdraw (diawali WD-)
   if (refId.startsWith('WD-')) {
-    const isSuccess = tx ? tx.status === 'success' : true;
+    const isSuccess = tx ? tx.status === 'success' : false;
     return res.status(200).json({
       status: true,
       type: 'withdraw',
@@ -54,22 +61,22 @@ module.exports = async (req, res) => {
     });
   }
 
-  // Jika transaksi ditemukan
+  // Jika transaksi ada
   if (tx) {
+    const currentStatus = String(tx.status || 'pending').toLowerCase();
     return res.status(200).json({
       status: true,
       type: 'deposit',
       data: {
         reference_id: tx.reference_id,
-        status: tx.status.toLowerCase(), // 'pending', 'success', 'expired', 'failed'
+        status: currentStatus, // 'pending' (belum bayar) atau 'success' (sudah di-approve admin)
         total_payment: tx.total_payment || tx.amount,
         amount: tx.amount,
       },
     });
   }
 
-  // Fallback jika tidak ditemukan sama sekali:
-  // Asumsikan pending dengan nominal 0
+  // Jika belum terdaftar: default status 'pending' (JANGAN PERNAH DEFAULT SUCCESS!)
   return res.status(200).json({
     status: true,
     type: 'deposit',
